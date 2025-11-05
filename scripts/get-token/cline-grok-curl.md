@@ -31,11 +31,11 @@ The `scripts/get-token` directory contains reusable helpers:
 ```bash
 chmod +x cline_get_token.sh cline_grok_chat.sh
 
-# Grab a token for reuse in another tool
-BEARER_TOKEN=$(./cline_get_token.sh temp/secrets.json)
+# Grab a token for reuse in another tool (showing verbose output)
+BEARER_TOKEN=$(./cline_get_token.sh -v temp/secrets.json)
 
 # Or run the complete Grok demo
-./cline_grok_chat.sh temp/secrets.json
+./cline_grok_chat.sh -v temp/secrets.json
 ```
 
-Prefer Python? Use `cline_get_token.py` and `cline_grok_chat.py` for the same responsibilities with the standard library.
+Prefer Python? Use `cline_get_token.py` and `cline_grok_chat.py` for the same responsibilities with the standard library (they accept the same `--verbose` / `--force-refresh` options).

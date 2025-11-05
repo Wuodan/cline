@@ -2,7 +2,11 @@
 # Outputs a valid Cline WorkOS bearer token, refreshing the stored credentials when needed.
 #
 # Usage:
-#   ./scripts/cline_get_token.sh [path/to/secrets.json]
+#   ./cline_get_token.sh [options] [path/to/secrets.json]
+#
+# Options:
+#   -v, --verbose        Print token expiry details to stderr
+#   -f, --force-refresh  Always refresh the token, even if still valid
 #
 # Environment:
 #   SECRETS_JSON       Path to secrets file (defaults to ~/.cline/data/secrets.json)
@@ -12,6 +16,33 @@
 #   Echoes the bearer token (prefixed with workos:) to stdout on success.
 
 set -euo pipefail
+
+VERBOSE=0
+FORCE_REFRESH=0
+POSITIONAL=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -v|--verbose)
+      VERBOSE=1
+      shift
+      ;;
+    -f|--force-refresh)
+      FORCE_REFRESH=1
+      shift
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
+    *)
+      POSITIONAL+=("$1")
+      shift
+      ;;
+  esac
+done
+
+set -- "${POSITIONAL[@]}"
 
 SECRETS_JSON=${1:-${SECRETS_JSON:-"$HOME/.cline/data/secrets.json"}}
 THRESHOLD_SECONDS=${THRESHOLD_SECONDS:-300}
@@ -33,7 +64,9 @@ EXPIRES_AT=$(jq -r '.expiresAt // 0' <<<"$ACCOUNT_JSON")
 NOW=$(date +%s)
 
 NEEDS_REFRESH=0
-if [[ -z "$CURRENT_TOKEN" ]]; then
+if (( FORCE_REFRESH )); then
+  NEEDS_REFRESH=1
+elif [[ -z "$CURRENT_TOKEN" ]]; then
   NEEDS_REFRESH=1
 elif (( EXPIRES_AT <= NOW + THRESHOLD_SECONDS )); then
   NEEDS_REFRESH=1
@@ -45,7 +78,7 @@ if (( NEEDS_REFRESH )); then
     exit 1
   fi
 
-  echo "Refreshing WorkOS bearer token..." >&2
+  (( VERBOSE )) && echo "Refreshing WorkOS bearer token..." >&2
   REFRESH_RESPONSE=$(curl -sS 'https://api.cline.bot/api/v1/auth/refresh' \
     -H 'Content-Type: application/json' \
     --data "{\"refreshToken\":\"${REFRESH_TOKEN}\",\"grantType\":\"refresh_token\"}")
@@ -95,4 +128,12 @@ if (( NEEDS_REFRESH )); then
 fi
 
 BEARER_TOKEN="workos:${CURRENT_TOKEN}"
+if (( VERBOSE )); then
+  SECONDS_LEFT=$(( EXPIRES_AT - NOW ))
+  if (( SECONDS_LEFT < 0 )); then
+    SECONDS_LEFT=0
+  fi
+  MINUTES_LEFT=$(( SECONDS_LEFT / 60 ))
+  echo "Token valid for ~${SECONDS_LEFT}s (~${MINUTES_LEFT} min) until $(date -u -d "@$EXPIRES_AT" '+%Y-%m-%dT%H:%M:%SZ')" >&2
+fi
 echo "$BEARER_TOKEN"

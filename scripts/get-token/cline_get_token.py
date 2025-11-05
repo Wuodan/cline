@@ -3,7 +3,7 @@
 Outputs a valid Cline WorkOS bearer token, refreshing stored credentials when needed.
 
 Usage:
-    python scripts/cline_get_token.py [--secrets PATH] [--threshold-seconds N]
+    python cline_get_token.py [--secrets PATH] [--threshold-seconds N] [--verbose] [--force-refresh]
 
 It reads the `cline:clineAccountId` blob from the secrets JSON (default: ~/.cline/data/secrets.json),
 refreshes the access token if it is missing or close to expiry, persists any updates, and prints the
@@ -40,6 +40,16 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=300,
         help="Refresh token when it expires in <= this many seconds (default: 300).",
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Print remaining validity window to stderr.",
+    )
+    parser.add_argument(
+        "-f", "--force-refresh",
+        action="store_true",
+        help="Always refresh the token even if it is still valid.",
     )
     return parser.parse_args()
 
@@ -118,15 +128,36 @@ def save_account(secrets_path: pathlib.Path, secrets: Dict[str, Any], account: D
     tmp_path.replace(secrets_path)
 
 
-def get_bearer_token(secrets_path: pathlib.Path, threshold_seconds: int) -> str:
+def get_bearer_token(
+    secrets_path: pathlib.Path,
+    threshold_seconds: int,
+    *,
+    verbose: bool = False,
+    force_refresh: bool = False,
+) -> str:
     secrets, account = load_account_blob(secrets_path)
 
-    if should_refresh(account, threshold_seconds):
-        print("Refreshing WorkOS bearer token...", file=sys.stderr)
+    needs_refresh = force_refresh or should_refresh(account, threshold_seconds)
+
+    if needs_refresh:
+        if verbose:
+            print("Refreshing WorkOS bearer token...", file=sys.stderr)
         account = refresh_account(account)
         save_account(secrets_path, secrets, account)
     else:
-        print("Using cached bearer token.", file=sys.stderr)
+        if verbose:
+            print("Using cached bearer token.", file=sys.stderr)
+
+    expires_at = int(account.get("expiresAt") or 0)
+    if verbose and expires_at:
+        now = int(time.time())
+        seconds_left = max(0, expires_at - now)
+        minutes_left = seconds_left // 60
+        expires_iso = dt.datetime.fromtimestamp(expires_at, tz=dt.timezone.utc).isoformat().replace("+00:00", "Z")
+        print(
+            f"Token valid for ~{seconds_left}s (~{minutes_left} min) until {expires_iso}",
+            file=sys.stderr,
+        )
 
     return f"workos:{account['idToken']}"
 
@@ -139,7 +170,12 @@ def main() -> None:
         raise SystemExit(f"Secrets file not found: {secrets_path}")
 
     try:
-        bearer_token = get_bearer_token(secrets_path, args.threshold_seconds)
+        bearer_token = get_bearer_token(
+            secrets_path,
+            args.threshold_seconds,
+            verbose=args.verbose,
+            force_refresh=args.force_refresh,
+        )
     except Exception as exc:  # noqa: BLE001
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)

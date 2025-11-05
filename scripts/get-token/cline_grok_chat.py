@@ -3,7 +3,7 @@
 Streams a Grok completion using the current Cline bearer token.
 
 Usage:
-    python scripts/cline_grok_chat.py [--secrets PATH] [--threshold-seconds N]
+    python cline_grok_chat.py [--secrets PATH] [--threshold-seconds N] [--verbose] [--force-refresh]
 
 The script reuses cline_get_token.get_bearer_token to obtain (and refresh) the token, then
 issues a streaming chat completion request with minimal headers.
@@ -38,6 +38,16 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=300,
         help="Refresh token when it expires in <= this many seconds (default: 300).",
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Print token refresh status and validity window.",
+    )
+    parser.add_argument(
+        "-f", "--force-refresh",
+        action="store_true",
+        help="Always refresh the token even if it is still valid.",
     )
     return parser.parse_args()
 
@@ -78,7 +88,12 @@ def main() -> None:
         raise SystemExit(f"Secrets file not found: {secrets_path}")
 
     try:
-        bearer_token = get_bearer_token(secrets_path, args.threshold_seconds)
+        bearer_token = get_bearer_token(
+            secrets_path,
+            args.threshold_seconds,
+            verbose=args.verbose,
+            force_refresh=args.force_refresh,
+        )
     except Exception as exc:  # noqa: BLE001
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
