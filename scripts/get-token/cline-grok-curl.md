@@ -23,11 +23,19 @@ The chat command yields streaming Server-Sent Events identical to the Cline IDE/
 
 ## Automating in Bash
 
-For a ready-to-run helper that keeps the bearer token fresh, updates the secrets file, and calls the Grok model with the minimal header set, run `scripts/cline_grok_curl.sh`.
+The `scripts/get-token` directory contains reusable helpers:
+
+- `cline_get_token.sh` refreshes credentials if necessary and prints the bearer token (prefixed with `workos:`).
+- `cline_grok_chat.sh` calls the helper above and performs the Grok streaming request with the minimal header set.
 
 ```bash
-chmod +x scripts/cline_grok_curl.sh          # one-time setup
-scripts/cline_grok_curl.sh temp/secrets.json # or rely on $SECRETS_JSON default
+chmod +x cline_get_token.sh cline_grok_chat.sh
+
+# Grab a token for reuse in another tool
+BEARER_TOKEN=$(./cline_get_token.sh temp/secrets.json)
+
+# Or run the complete Grok demo
+./cline_grok_chat.sh temp/secrets.json
 ```
 
-Prefer Python? `scripts/cline_grok_curl.py` performs the same workflow with the standard library.
+Prefer Python? Use `cline_get_token.py` and `cline_grok_chat.py` for the same responsibilities with the standard library.
